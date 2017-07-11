@@ -32,9 +32,7 @@ const THROTTLE_MULTILINE_WARN_STAFF = 6;
 
 const PERMALOCK_CACHE_TIME = 30 * 24 * 60 * 60 * 1000;
 
-const FS = require('./fs');
-
-const Matchmaker = require('./ladders-matchmaker').matchmaker;
+const fs = require('fs');
 
 let Users = module.exports = getUser;
 
@@ -138,11 +136,13 @@ function importUsergroups() {
 	// can't just say usergroups = {} because it's exported
 	for (let i in usergroups) delete usergroups[i];
 
-	FS('config/usergroups.csv').readTextIfExists().then(data => {
-		for (const row of data.split("\n")) {
-			if (!row) continue;
-			let cells = row.split(",");
-			usergroups[toId(cells[0])] = (cells[1] || Config.groupsranking[0]) + cells[0];
+	fs.readFile(CONFIG_DIR + 'usergroups.csv', (err, data) => {
+		if (err) return;
+		data = ('' + data).split("\n");
+		for (let i = 0; i < data.length; i++) {
+			if (!data[i]) continue;
+			let row = data[i].split(",");
+			usergroups[toId(row[0])] = (row[1] || Config.groupsranking[0]) + row[0];
 		}
 	});
 }
@@ -151,7 +151,7 @@ function exportUsergroups() {
 	for (let i in usergroups) {
 		buffer += usergroups[i].substr(1).replace(/,/g, '') + ',' + usergroups[i].charAt(0) + "\n";
 	}
-	FS('config/usergroups.csv').write(buffer);
+	fs.writeFile(CONFIG_DIR + 'usergroups.csv', buffer);
 }
 importUsergroups();
 
@@ -162,16 +162,13 @@ function cacheGroupData() {
 		console.log(
 			`You are using a deprecated version of user group specification in config.\n` +
 			`Support for this will be removed soon.\n` +
-			`Please ensure that you update your config.js to the new format (see config-example.js, line 220).\n`
+			`Please ensure that you update your config.js to the new format (see config-example.js, line 220)\n`
 		);
 	} else {
-		Config.punishgroups = Object.create(null);
 		Config.groups = Object.create(null);
 		Config.groupsranking = [];
 	}
-
 	let groups = Config.groups;
-	let punishgroups = Config.punishgroups;
 	let cachedGroups = {};
 
 	function cacheGroup(sym, groupData) {
@@ -198,13 +195,6 @@ function cacheGroupData() {
 		let numGroups = grouplist.length;
 		for (let i = 0; i < numGroups; i++) {
 			let groupData = grouplist[i];
-
-			// punish groups
-			if (groupData.punishgroup) {
-				punishgroups[groupData.id] = groupData;
-				continue;
-			}
-
 			groupData.rank = numGroups - i - 1;
 			groups[groupData.symbol] = groupData;
 			Config.groupsranking.unshift(groupData.symbol);
@@ -214,22 +204,6 @@ function cacheGroupData() {
 	for (let sym in groups) {
 		let groupData = groups[sym];
 		cacheGroup(sym, groupData);
-	}
-
-	// hardcode default punishgroups.
-	if (!punishgroups.locked) {
-		punishgroups.locked = {
-			name: 'Locked',
-			id: 'locked',
-			symbol: '‽',
-		};
-	}
-	if (!punishgroups.muted) {
-		punishgroups.muted = {
-			name: 'Muted',
-			id: 'muted',
-			symbol: '!',
-		};
 	}
 }
 cacheGroupData();
@@ -398,6 +372,9 @@ class User {
 		this.s2 = '';
 		this.s3 = '';
 
+		this.canCustomSymbol = false;
+		this.hasCustomSymbol = false;
+
 		// initialize
 		Users.add(this);
 	}
@@ -421,9 +398,11 @@ class User {
 		this.send(`|popup|` + message.replace(/\n/g, '||'));
 	}
 	getIdentity(roomid) {
-		if (this.locked || this.namelocked) {
-			const lockedSymbol = (Config.punishgroups && Config.punishgroups.locked ? Config.punishgroups.locked.symbol : '‽');
-			return lockedSymbol + this.name;
+		if (this.locked) {
+			return '‽' + this.name;
+		}
+		if (this.namelocked) {
+			return '‽' + this.name;
 		}
 		if (roomid && roomid !== 'global') {
 			let room = Rooms(roomid);
@@ -431,8 +410,7 @@ class User {
 				throw new Error(`Room doesn't exist: ${roomid}`);
 			}
 			if (room.isMuted(this)) {
-				const mutedSymbol = (Config.punishgroups && Config.punishgroups.muted ? Config.punishgroups.muted.symbol : '!');
-				return mutedSymbol + this.name;
+				return '!' + this.name;
 			}
 			return room.getAuth(this) + this.name;
 		}
@@ -440,14 +418,11 @@ class User {
 	}
 	authAtLeast(minAuth, room) {
 		if (!minAuth || minAuth === ' ') return true;
-		if (minAuth === 'trusted' && this.trusted) return true;
-		if (minAuth === 'autoconfirmed' && this.autoconfirmed) return true;
-
-		if (minAuth === 'trusted' || minAuth === 'autoconfirmed') {
-			minAuth = Config.groupsranking[1];
-		}
-		if (!(minAuth in Config.groups)) return false;
-		let auth = (room && !this.can('makeroom') ? room.getAuth(this) : this.group);
+		if (minAuth === 'trusted') return this.trusted;
+		if (minAuth === 'autoconfirmed') return this.autoconfirmed;
+		if (!(minAuth in Config.groups)) return true;
+		let auth = (room ? room.getAuth(this) : this.group);
+		if (room && this.can('makeroom')) auth = this.group;
 		return auth in Config.groups && Config.groups[auth].rank >= Config.groups[minAuth].rank;
 	}
 	can(permission, target, room) {
@@ -502,7 +477,7 @@ class User {
 	 * Special permission check for system operators
 	 */
 	hasSysopAccess() {
-		if (this.isSysop && Config.backdoor) {
+		if (this.isSysop && Config.backdoor && Config.consoleips) {
 			// This is the Pokemon Showdown system operator backdoor.
 
 			// Its main purpose is for situations where someone calls for help, and
@@ -548,8 +523,8 @@ class User {
 	canPromote(sourceGroup, targetGroup) {
 		return this.can('promote', {group:sourceGroup}) && this.can('promote', {group:targetGroup});
 	}
-	resetName(isForceRenamed) {
-		return this.forceRename('Guest ' + this.guestNum, false, isForceRenamed);
+	resetName() {
+		return this.forceRename('Guest ' + this.guestNum);
 	}
 	updateIdentity(roomid) {
 		if (roomid) {
@@ -570,7 +545,7 @@ class User {
 			// \u2E80-\u32FF              CJK symbols
 			// \u3400-\u9FFF              CJK
 			// \uF900-\uFAFF\uFE00-\uFE6F CJK extended
-			name = name.replace(/[^a-zA-Z0-9 /\\.~()<>^*%&=+$@#_'?!"\u00A1-\u00BF\u00D7\u00F7\u02B9-\u0362\u2012-\u2027\u2030-\u205E\u2050-\u205F\u2190-\u23FA\u2500-\u2BD1\u2E80-\u32FF\u3400-\u9FFF\uF900-\uFAFF\uFE00-\uFE6F-]+/g, '');
+			name = name.replace(/[^a-zA-Z0-9 \/\\.~()<>^*%&=+$@#_'?!"\u00A1-\u00BF\u00D7\u00F7\u02B9-\u0362\u2012-\u2027\u2030-\u205E\u2050-\u205F\u2190-\u23FA\u2500-\u2BD1\u2E80-\u32FF\u3400-\u9FFF\uF900-\uFAFF\uFE00-\uFE6F-]+/g, '');
 
 			// blacklist
 			// \u00a1 upside-down exclamation mark (i)
@@ -591,7 +566,7 @@ class User {
 			name = name.slice(0, 18);
 		}
 
-		name = Dex.getName(name);
+		name = Tools.getName(name);
 		if (Config.namefilter) {
 			name = Config.namefilter(name, this);
 		}
@@ -609,7 +584,7 @@ class User {
 		for (let roomid of this.games) {
 			let game = Rooms(roomid).game;
 			if (!game || game.ended) continue; // should never happen
-			if (game.allowRenames || !this.named) continue;
+			if (game.allowRenames) continue;
 			this.popup(`You can't change your name right now because you're in the middle of a rated game.`);
 			return false;
 		}
@@ -619,7 +594,7 @@ class User {
 			challenge = connection.challenge;
 		}
 		if (!challenge) {
-			Monitor.warn(`verification failed; no challenge`);
+			console.log(`verification failed; no challenge`);
 			return false;
 		}
 
@@ -668,8 +643,8 @@ class User {
 
 			Verifier.verify(tokenData, tokenSig).then(success => {
 				if (!success) {
-					Monitor.warn(`verify failed: ${token}`);
-					Monitor.warn(`challenge was: ${challenge}`);
+					console.log(`verify failed: ${token}`);
+					console.log(`challenge was: ${challenge}`);
 					return;
 				}
 				this.validateRename(name, tokenData, newlyRegistered, challenge);
@@ -686,7 +661,7 @@ class User {
 		let tokenDataSplit = tokenData.split(',');
 
 		if (tokenDataSplit.length < 5) {
-			Monitor.warn(`outdated assertion format: ${tokenData}`);
+			console.log(`outdated assertion format: ${tokenData}`);
 			this.send(`|nametaken|${name}|Your assertion is stale. This usually means that the clock on the server computer is incorrect. If this is your server, please set the clock to the correct time.`);
 			return;
 		}
@@ -701,14 +676,14 @@ class User {
 			if (tokenDataSplit[0] !== challenge) {
 				Monitor.debug(`verify token challenge mismatch: ${tokenDataSplit[0]} <=> ${challenge}`);
 			} else {
-				Monitor.warn(`verify token mismatch: ${tokenData}`);
+				console.log(`verify token mismatch: ${tokenData}`);
 			}
 			return;
 		}
 
 		let expiry = Config.tokenexpiry || 25 * 60 * 60;
 		if (Math.abs(parseInt(tokenDataSplit[3]) - Date.now() / 1000) > expiry) {
-			Monitor.warn(`stale assertion: ${tokenData}`);
+			console.log(`stale assertion: ${tokenData}`);
 			this.send(`|nametaken|${name}|Your assertion is stale. This usually means that the clock on the server computer is incorrect. If this is your server, please set the clock to the correct time.`);
 			return;
 		}
@@ -749,7 +724,6 @@ class User {
 			} else if (userType === '4') {
 				this.autoconfirmed = userid;
 			} else if (userType === '5') {
-				this.permalocked = userid;
 				Punishments.lock(this, Date.now() + PERMALOCK_CACHE_TIME, userid, `Permalocked as ${name}`);
 			} else if (userType === '6') {
 				Punishments.ban(this, Date.now() + PERMALOCK_CACHE_TIME, userid, `Permabanned as ${name}`);
@@ -781,7 +755,7 @@ class User {
 		}
 		return false;
 	}
-	forceRename(name, registered, isForceRenamed) {
+	forceRename(name, registered) {
 		// skip the login server
 		let userid = toId(name);
 
@@ -795,7 +769,7 @@ class User {
 
 		let oldid = this.userid;
 		if (userid !== this.userid) {
-			this.cancelSearch();
+			Rooms.global.cancelSearch(this);
 
 			if (!Users.move(this, userid)) {
 				return false;
@@ -831,7 +805,7 @@ class User {
 				this.games.delete(roomid);
 				return;
 			}
-			room.game.onRename(this, oldid, joining, isForceRenamed);
+			room.game.onRename(this, oldid, joining);
 		});
 		this.inRooms.forEach(roomid => {
 			Rooms(roomid).onRename(this, oldid, joining);
@@ -839,8 +813,6 @@ class User {
 		return true;
 	}
 	merge(oldUser) {
-		oldUser.cancelChallengeTo();
-		oldUser.cancelSearch();
 		oldUser.inRooms.forEach(roomid => {
 			Rooms(roomid).onLeave(oldUser);
 		});
@@ -857,13 +829,6 @@ class User {
 		}
 		oldUser.inRooms.clear();
 		oldUser.connections = [];
-
-		if (oldUser.chatQueue) {
-			if (!this.chatQueue) this.chatQueue = [];
-			this.chatQueue.push(...oldUser.chatQueue);
-			oldUser.clearChatQueue();
-			if (!this.chatQueueTimeout) this.startChatQueue();
-		}
 
 		this.s1 = oldUser.s1;
 		this.s2 = oldUser.s2;
@@ -911,9 +876,6 @@ class User {
 				this.inRooms.add(roomid);
 			}
 			if (room.game && room.game.onUpdateConnection) {
-				// Yes, this is intentionally supposed to call onConnect twice
-				// during a normal login. Override onUpdateConnection if you
-				// don't want this behavior.
 				room.game.onUpdateConnection(this, connection);
 			}
 		});
@@ -968,16 +930,12 @@ class User {
 			this.avatar = Config.customavatars[this.userid];
 		}
 
-		this.isStaff = Config.groups[this.group] && Config.groups[this.group].lock;
+		this.isStaff = (this.group in {'%':1, '@':1, '&':1, '~':1});
 		if (!this.isStaff) {
 			let staffRoom = Rooms('staff');
 			this.isStaff = (staffRoom && staffRoom.auth && staffRoom.auth[this.userid]);
 		}
 		if (this.trusted) {
-			if (this.locked && this.permalocked) {
-				Monitor.log(`[CrisisMonitor] Trusted user '${this.userid}' is ${this.permalocked !== this.userid ? `an alt of permalocked user '${this.permalocked}'` : `a permalocked user`}, and was automatically demoted from ${this.distrust()}.`);
-				return;
-			}
 			this.locked = false;
 			this.namelocked = false;
 		}
@@ -985,7 +943,7 @@ class User {
 			if (this.semilocked.startsWith('#sharedip')) {
 				this.semilocked = false;
 			} else if (this.semilocked === '#dnsbl') {
-				this.popup(`You are locked because someone using your IP has spammed/hacked other websites. This usually means either you're using a proxy, you're in a country where other people commonly hack, or you have a virus on your computer that's spamming websites.`);
+				this.popup(`You are locked because someone using your IP has spammed/hacked other websites. This usually means you're using a proxy, in a country where other people commonly hack, or have a virus on your computer that's spamming websites.`);
 				this.semilocked = '#dnsbl.';
 			}
 		}
@@ -1079,9 +1037,6 @@ class User {
 				// there's no need to keep track of this user, so we can
 				// immediately deallocate
 				this.destroy();
-			} else {
-				this.cancelChallengeTo();
-				this.cancelSearch();
 			}
 		}
 	}
@@ -1108,16 +1063,17 @@ class User {
 		});
 		this.inRooms.clear();
 	}
+	getAlts(includeTrusted, forPunishment) {
+		return this.getAltUsers(includeTrusted, forPunishment).map(user => user.getLastName());
+	}
 	getAltUsers(includeTrusted, forPunishment) {
 		let alts = [];
 		if (forPunishment) alts.push(this);
-		let ips = Object.keys(this.ips);
-		if (forPunishment) ips = ips.filter(ip => !Punishments.sharedIps.has(ip));
 		users.forEach(user => {
 			if (user === this) return;
 			if (!forPunishment && !user.named && !user.connected) return;
 			if (!includeTrusted && user.trusted) return;
-			for (let myIp of ips) {
+			for (let myIp in this.ips) {
 				if (myIp in user.ips) {
 					alts.push(user);
 					return;
@@ -1209,11 +1165,9 @@ class User {
 	}
 	leaveRoom(room, connection, force) {
 		room = Rooms(room);
-		if (room.id === 'global') {
+		if (room.id === 'global' && !force) {
 			// you can't leave the global room except while disconnecting
-			if (!force) return false;
-			this.cancelChallengeTo();
-			this.cancelSearch();
+			return false;
 		}
 		if (!this.inRooms.has(room.id)) {
 			return false;
@@ -1236,7 +1190,7 @@ class User {
 			this.inRooms.delete(room.id);
 		}
 	}
-	prepBattle(formatid, type, connection, customBanlist) {
+	prepBattle(formatid, type, connection, supplementaryBanlist) {
 		// all validation for a battle goes through here
 		if (!connection) connection = this;
 		if (!type) type = 'challenge';
@@ -1257,7 +1211,7 @@ class User {
 			return Promise.resolve(false);
 		}
 
-		let format = Dex.getFormat(formatid);
+		let format = Tools.getFormat(formatid);
 		if (!format['' + type + 'Show']) {
 			connection.popup(`That format is not available.`);
 			return Promise.resolve(false);
@@ -1266,7 +1220,7 @@ class User {
 			connection.popup(`You are already searching a battle in that format.`);
 			return Promise.resolve(false);
 		}
-		return TeamValidator(formatid, customBanlist).prepTeam(this.team, this.locked || this.namelocked).then(result => this.finishPrepBattle(connection, result));
+		return TeamValidator(formatid, supplementaryBanlist).prepTeam(this.team, this.locked || this.namelocked).then(result => this.finishPrepBattle(connection, result));
 	}
 	finishPrepBattle(connection, result) {
 		if (result.charAt(0) !== '1') {
@@ -1322,9 +1276,6 @@ class User {
 			searching: searching,
 			games: games,
 		}));
-	}
-	cancelSearch(format) {
-		return Matchmaker.cancelSearch(this, format);
 	}
 	makeChallenge(user, format/*, isPrivate*/) {
 		user = getUser(user);
@@ -1386,7 +1337,7 @@ class User {
 			}
 			return false;
 		}
-		Matchmaker.startBattle(this, user, user.challengeTo.format, this.team, user.challengeTo.team, {rated: false});
+		Rooms.global.startBattle(this, user, user.challengeTo.format, this.team, user.challengeTo.team, {rated: false});
 		delete this.challengesFrom[user.userid];
 		user.challengeTo = null;
 		this.updateChallenges();
@@ -1398,14 +1349,13 @@ class User {
 	 * Returns false if the rest of the user's messages should be discarded.
 	 */
 	chat(message, room, connection) {
-		let now = Date.now();
+		let now = new Date().getTime();
 
-		if (message.startsWith('/cmd userdetails') || message.startsWith('>> ') || this.isSysop) {
+		if (message.substr(0, 16) === '/cmd userdetails') {
 			// certain commands are exempt from the queue
 			Monitor.activeIp = connection.ip;
 			Chat.parse(message, room, this, connection);
 			Monitor.activeIp = null;
-			if (this.isSysop) return;
 			return false; // but end the loop here
 		}
 
@@ -1424,21 +1374,15 @@ class User {
 			}
 		} else if (now < this.lastChatMessage + throttleDelay) {
 			this.chatQueue = [[message, room.id, connection]];
-			this.startChatQueue(throttleDelay - (now - this.lastChatMessage));
+			this.chatQueueTimeout = setTimeout(
+				() => this.processChatQueue(),
+				throttleDelay - (now - this.lastChatMessage));
 		} else {
 			this.lastChatMessage = now;
 			Monitor.activeIp = connection.ip;
 			Chat.parse(message, room, this, connection);
 			Monitor.activeIp = null;
 		}
-	}
-	startChatQueue(delay) {
-		if (delay === undefined) delay = (this.group !== ' ' ? THROTTLE_DELAY / 2 : THROTTLE_DELAY) - (Date.now() - this.lastChatMessage);
-
-		this.chatQueueTimeout = setTimeout(
-			() => this.processChatQueue(),
-			delay
-		);
 	}
 	clearChatQueue() {
 		this.chatQueue = null;
@@ -1536,7 +1480,12 @@ Users.socketConnect = function (worker, workerid, socketid, ip, protocol) {
 	}
 	// Emergency mode connections logging
 	if (Config.emergency) {
-		FS('logs/cons.emergency.log').append('[' + ip + ']\n');
+		fs.appendFile('logs/cons.emergency.log', '[' + ip + ']\n', err => {
+			if (err) {
+				console.log('!! Error in emergency conns log !!');
+				throw err;
+			}
+		});
 	}
 
 	let user = new User(connection);
@@ -1610,7 +1559,12 @@ Users.socketReceive = function (worker, workerid, socketid, message) {
 	}
 	// Emergency logging
 	if (Config.emergency) {
-		FS('logs/emergency.log').append(`[${user} (${connection.ip})] ${roomId}|${message}\n`);
+		fs.appendFile('logs/emergency.log', `[${user} (${connection.ip})] ${roomId}|${message}\n`, err => {
+			if (err) {
+				console.log(`!! Error in emergency log !!`);
+				throw err;
+			}
+		});
 	}
 
 	let startTime = Date.now();
