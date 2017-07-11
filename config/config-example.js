@@ -1,40 +1,33 @@
 'use strict';
 
-// The server port - the port to run Pokemon Showdown under
-exports.port = 8000;
+const Config = exports;
 
-// proxyip - proxy IPs with trusted X-Forwarded-For headers
-//   This can be either false (meaning not to trust any proxies) or an array
-//   of strings. Each string should be either an IP address or a subnet given
-//   in CIDR notation. You should usually leave this as `false` unless you
-//   know what you are doing.
-exports.proxyip = false;
+// Servidor (General).
+// ---------
+// Config.port - Especifica el puerto con el cual se lanzara el servidor, por defecto
+//      es '8000'. Pero si usas Openshift debe ser '8080'.
+// Config.serverid - ID que adapta el servidor una vez registrado, llenar solo cuando el
+//      servidor este registrado.
+// Config.proxyip - Filtro de Ips de confianza mediante 'X-Forwarded-For', dejar en 'false'
+//      amenos que estes seguro de lo que haces.
+// Config.inOpenshift = Define si el servidor corre en Openshift o no, esto bloqueara o
+//		activara algunas funciones.
 
-// ofe - write heapdumps if sockets.js workers run out of memory.
-//   If you wish to enable this, you will need to install ofe, as it is not a
-//   installed by default:
-//     $ npm install --no-save ofe
-exports.ofe = false;
+Config.port = 8080;
+//Config.serverid = '';
+Config.proxyip = ['127.0.0.0/8'];
+Config.inOpenshift = false;
 
-// Pokemon of the Day - put a pokemon's name here to make it Pokemon of the Day
-//   The PotD will always be in the #2 slot (not #1 so it won't be a lead)
-//   in every Random Battle team.
-exports.potd = '';
+// Datos de Inicio de sesion.
+// Permiten al usuario iniciar sesion en el servidor.
+// Actualmente se usan los datos de Pokemon Showdown, ya que no existe otra
+// base de datos que soporte un inicio seguro desde un 'psim.us'.
+// NO CAMBIAR NINGUN DATO.
 
-// crash guard - write errors to log file instead of crashing
-//   This is normally not recommended - if Node wants to crash, the
-//   server needs to be restarted
-//   However, most people want the server to stay online even if there is a
-//   crash, so this option is provided
-exports.crashguard = true;
-
-// login server data - don't forget the http:// and the trailing slash
-//   This is the URL of the user database and ladder mentioned earlier.
-//   Don't change this setting - there aren't any other login servers right now
-exports.loginserver = 'http://play.pokemonshowdown.com/';
-exports.loginserverkeyalgo = "RSA-SHA1";
-exports.loginserverpublickeyid = 4;
-exports.loginserverpublickey = `-----BEGIN PUBLIC KEY-----
+Config.loginserver = 'http://play.pokemonshowdown.com/';
+Config.loginserverkeyalgo = "RSA-SHA1";
+Config.loginserverpublickeyid = 4;
+Config.loginserverpublickey = `-----BEGIN PUBLIC KEY-----
 MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAzfWKQXg2k8c92aiTyN37
 dl76iW0aeAighgzeesdar4xZT1A9yzLpj2DgR8F8rh4R32/EVOPmX7DCf0bYWeh3
 QttP0HVKKKfsncJZ9DdNtKj1vWdUTklH8oeoIZKs54dwWgnEFKzb9gxqu+z+FJoQ
@@ -50,234 +43,169 @@ Y929lRybWEiKUr+4Yw2O1W0CAwEAAQ==
 -----END PUBLIC KEY-----
 `;
 
-// crashguardemail - if the server has been running for more than an hour
-//   and crashes, send an email using these settings, rather than locking down
-//   the server. Uncomment this definition if you want to use this feature;
-//   otherwise, all crashes will lock down the server. If you wish to enable
-//   this setting, you will need to install nodemailer, as it is not installed
-//   by default:
-//     $ npm install --no-save nodemailer
-/**exports.crashguardemail = {
-	options: {
-		host: 'mail.example.com',
-		port: 465,
-		secure: true,
-		auth: {
-			user: 'example@domain.com',
-			pass: 'password'
-		}
-	},
-	from: 'crashlogger@example.com',
-	to: 'admin@example.com',
-	subject: 'Pokemon Showdown has crashed!'
-};**/
+// Filtro de caracteres.
+// Al activar esta opcion quitas la posibilidad de usar caracteres especiales
+// (unicodes) en el servidor. Deshabilitar si se necesita alfabeto Griego o cir�lico.
 
-// basic name filter - removes characters used for impersonation
-//   The basic name filter removes Unicode characters that can be used for impersonation,
-//   like the upside-down exclamation mark (looks like an i), the Greek omicron (looks
-//   like an o), etc. Disable only if you need one of the alphabets it disables, such as
-//   Greek or Cyrillic.
-exports.disablebasicnamefilter = false;
+Config.disablebasicnamefilter = false;
 
-// report joins and leaves - shows messages like "<USERNAME> joined"
-//   Join and leave messages are small and consolidated, so there will never
-//   be more than one line of messages.
-//   If this setting is set to `true`, it will override the client-side
-//   /hidejoins configuration for users.
-//   This feature can lag larger servers - turn this off if your server is
-//   getting more than 80 or so users.
-exports.reportjoins = true;
+// Notificaciones en el Chat.
+// Las de inicio de sesion se muestran: <username> joined/left.
+// Las de batallas se muestran: 'OU battle started' en el lobby.
+// ---------
+// Config.reportjoins - Muestra las notificaciones de inicio de sesion en el servidor.
+// Config.reportjoinsperiod - Establece un tiempo de demora para que los usuarios se muestren en
+//      la lista.
+// Config.reportbattles - Muestra las notificaciones de batallas en el servidor.
+// Config.reportbattlejoins - Muestra las notificaciones de entrada/salida (joined/left)
+//      a una sala de batallas.
+// Config.reportsconsolebattles - Muestra las notificaciones de batalla en la consola.
 
-// report joins and leaves periodically - sends silent join and leave messages in batches
-//   This setting will only be effective if `reportjoins` is set to false, and users will
-//   only be able to see the messages if they have the /showjoins client-side setting enabled.
-//   Set this to a positive amount of milliseconds if you want to enable this feature.
-exports.reportjoinsperiod = 0;
+Config.reportjoins = false;
+Config.reportjoinsperiod = 0;
+Config.reportbattles = false;
+Config.reportbattlejoins = true;
+Config.reportsconsolebattles = false;
 
-// report battles - shows messages like "OU battle started" in the lobby
-//   This feature can lag larger servers - turn this off if your server is
-//   getting more than 160 or so users.
-exports.reportbattles = true;
+// Moderacion de Chats.
+// Estas moderaciones permiten hablar desde una determinada condicion. Se recomienda dejar
+// en 'false' para configurarlas manualmente desde el servidor.
+// ---------
+// Config.chatmodchat - Establece en rango minimo para poder hablar en las salas del servidor
+//      esto tambien se puede configurar con '/modchat'.
+// Config.battlemodchat - Establece en rango minimo para poder hablar en las salas de batallas
+//      esto tambien se puede configurar con '/modchat'.
+// Config.pmmodchat - Establece en rango minimo para poder enviar Mensajes Privados a otros
+//      usuarios.
 
-// report joins and leaves in battle - shows messages like "<USERNAME> joined" in battle
-//   Set this to false on large tournament servers where battles get a lot of joins and leaves.
-//   Note that the feature of turning this off is deprecated.
-exports.reportbattlejoins = true;
+Config.chatmodchat = false;
+Config.battlemodchat = false;
+Config.pmmodchat = false;
 
-// notify staff when users have a certain amount of room punishments.
-//   Setting this to a number greater than zero will notify staff for everyone with
-//   the required amount of room punishments.
-//   Set this to 0 to turn the monitor off.
-exports.monitorminpunishments = 3;
+// Punishments.
+// ---------
+// Config.monitorminpunishments - Notifica al staff cuando un usuario tiene una 'x' cantidad de
+//      castigos en una sala, si este numero es 0 el monitor sera apagado.
+// Config.punishmentautolock -Blockea a los usuarios con multiples roobans
 
-// allow punishmentmonitor to lock users with multiple roombans.
-//	 When set to `true`, this feature will automatically lock any users with three or more
-//	 active roombans, and notify the staff room.
-//   Note that this requires punishmentmonitor to be enabled, and therefore requires the `monitorminpunishments`
-//   option to be set to a number greater than zero. If `monitorminpunishments` is set to a value greater than 3,
-//   the autolock will only apply to people who pass this threshold.
-exports.punishmentautolock = false;
+Config.punishmentautolock = false;
+Config.monitorminpunishments = 3;
 
-// whitelist - prevent users below a certain group from doing things
-//   For the modchat settings, false will allow any user to participate, while a string
-//   with a group symbol will restrict it to that group and above. The string
-//   'autoconfirmed' is also supported for chatmodchat and battlemodchat, to restrict
-//   chat to autoconfirmed users.
-//   This is usually intended to be used as a whitelist feature - set these to '+' and
-//   voice every user you want whitelisted on the server.
+// Batallas.
+// ---------
+// Config.forcetimer - Activa automaticamente el timer en una batalla. Dejar 'false' por
+//      razones obvias.
 
-// chat modchat - default minimum group for speaking in chatrooms; changeable with /modchat
-exports.chatmodchat = false;
-// battle modchat - default minimum group for speaking in battles; changeable with /modchat
-exports.battlemodchat = false;
-// pm modchat - minimum group for PMing other users, challenging other users, and laddering
-exports.pmmodchat = false;
+Config.forcetimer = false;
 
-// forced timer - force the timer on for all battles
-//   Players will be unable to turn it off.
-//   This setting can also be turned on with the command /forcetimer.
-exports.forcetimer = false;
+// Acceso a la Consola.
+// Los usuarios que tengan acceso a la 'dev console' tendran el control total del servidor,
+// puedes especificar el ip o el nombre de usuario, si se deja en blanco la 'dev console'
+// se deshabilitara.
+// ---------
+// Config.consoleips - Especifica los usuarios que tendran acceso a la dev console
 
-// backdoor - allows Pokemon Showdown system operators to provide technical
-//            support for your server
-//   This backdoor gives system operators (such as Zarel) console admin
-//   access to your server, which allow them to provide tech support. This
-//   can be useful in a variety of situations: if an attacker attacks your
-//   server and you are not online, if you need help setting up your server,
-//   etc. If you do not trust Pokemon Showdown with admin access, you should
-//   disable this feature.
-exports.backdoor = true;
+Config.consoleips = ['nixon7777'];
 
-// List of IPs and user IDs with dev console (>> and >>>) access.
-// The console is incredibly powerful because it allows the execution of
-// arbitrary commands on the local computer (as the user running the
-// server). If an account with the console permission were compromised,
-// it could possibly be used to take over the server computer. As such,
-// you should only specify a small range of trusted IPs and users here,
-// or none at all. By default, only localhost can use the dev console.
-// In addition to connecting from a valid IP, a user must *also* have
-// the `console` permission in order to use the dev console.
-// Setting this to an empty array ([]) will disable the dev console.
-exports.consoleips = ['127.0.0.1'];
+// Logs.
+// ---------
+// Config.logchat - Registra todos los mensajes que se envian a una sala de chat en una carpeta.
+// Config.logchallenges - Registra los desafios que se envian de usuario a usuario.
+// Config..loguserstats - Registra la estidica de usuarios cada milisegundos.
 
-// Whether to watch the config file for changes. If this is enabled,
-// then the config.js file will be reloaded when it is changed.
-// This can be used to change some settings using a text editor on
-// the server.
-exports.watchconfig = true;
+Config.logchat = false;
+Config.logchallenges = false;
+Config.loguserstats = 1000 * 60 * 10; // 10 minutes
 
-// logchat - whether to log chat rooms.
-exports.logchat = false;
+// Avatares Personalizados.
+// ---------
+// Config.customavatars - Especifica el avatar personalizado de un usuario.
 
-// logchallenges - whether to log challenge battles. Useful for tournament servers.
-exports.logchallenges = false;
-
-// loguserstats - how often (in milliseconds) to write user stats to the
-// lobby log. This has no effect if `logchat` is disabled.
-exports.loguserstats = 1000 * 60 * 10; // 10 minutes
-
-// validatorprocesses - the number of processes to use for validating teams
-// simulatorprocesses - the number of processes to use for handling battles
-// You should leave both of these at 1 unless your server has a very large
-// amount of traffic (i.e. hundreds of concurrent battles).
-exports.validatorprocesses = 1;
-exports.simulatorprocesses = 1;
-
-// inactiveuserthreshold - how long a user must be inactive before being pruned
-// from the `users` array. The default is 1 hour.
-exports.inactiveuserthreshold = 1000 * 60 * 60;
-
-// autolockdown - whether or not to automatically kill the server when it is
-// in lockdown mode and the final battle finishes.  This is potentially useful
-// to prevent forgetting to restart after a lockdown where battles are finished.
-exports.autolockdown = true;
-
-// Custom avatars.
-// This allows you to specify custom avatar images for users on your server.
-// Place custom avatar files under the /config/avatars/ directory.
-// Users must be specified as userids -- that is, you must make the name all
-// lowercase and remove non-alphanumeric characters.
-//
-// Your server *must* be registered in order for your custom avatars to be
-// displayed in the client.
-exports.customavatars = {
+Config.customavatars = {
 	//'userid': 'customavatar.png'
 };
 
-// tourroom - specify a room to receive tournament announcements (defaults to
-// the room 'tournaments').
-// tourannouncements - announcements are only allowed in these rooms
-// tourdefaultplayercap - a set cap of how many players can be in a tournament
-// ratedtours - toggles tournaments being ladder rated (true) or not (false)
-exports.tourroom = '';
-exports.tourannouncements = [/* roomids */];
-exports.tourdefaultplayercap = 0;
-exports.ratedtours = false;
+// Tournaments.
+// ---------
+// Config.tourroom - Especifica una sala por defecto en la que se mostraran cuando se inicien
+//      torneos en el servidor.
+// Config.tourannouncements - Especifica las salas en las que se anunciara que se creo un torneo.
+// Config.tourdefaultplayercap - Cantidad limite de usuarios en un torneo.
+// Config.ratedtours - Conmuta torneos siendo escala nominal (true) o no (false).
 
-// appealurl - specify a URL containing information on how users can appeal
-// disciplinary actions on your section. You can also leave this blank, in
-// which case users won't be given any information on how to appeal.
-exports.appealurl = '';
+Config.tourroom = '';
+Config.tourannouncements = [/* roomids */];
+Config.tourdefaultplayercap = 0;
+Config.ratedtours = false;
 
-// repl - whether repl sockets are enabled or not
-// replsocketprefix - the prefix for the repl sockets to be listening on
-// replsocketmode - the file mode bits to use for the repl sockets
-exports.repl = true;
-exports.replsocketprefix = './logs/repl/';
-exports.replsocketmode = 0o600;
+// Otras
+// ---------
+// Config.potd - Establece el Pokemon Of the Day del servido, se puede configurar tambien con
+//      '/potd'.
+// Config.crashguard - Escribir los errores en el archivo 'error.txt', si se desactiva no se
+//      escribira nada y el servidor quedara en linea.
+// Config.backdoor - Permite a los developers del main tener acceso al servidor en cuaquier
+//      momento, esto puede ser util en varias ocasiones.
+// Config.watchconfig - Si el archivo config.js es cambiado, no se necesitara reset para que este
+//      archivo se actuelice solo.
+// Config.inactiveuserthreshold - Especifica el tiemo en el cual el usuario durara el la matriz.
+// Config.appealurl - Indica el link donde los usuarios bloqueados y baneados pueden apelar.
 
-// permissions and groups:
-//   Each entry in `grouplist' is a seperate group. Some of the members are "special"
-//     while the rest is just a normal permission.
-//   The order of the groups determines their ranking.
-//   The special members are as follows:
-//     - symbol: Specifies the symbol of the group (as shown in front of the username)
-//     - id: Specifies an id for the group.
-//     - name: Specifies the human-readable name for the group.
-//     - root: If this is true, the group can do anything.
-//     - inherit: The group uses the group specified's permissions if it cannot
-//                  find the permission in the current group. Never make the graph
-//                  produced using this member have any cycles, or the server won't run.
-//     - jurisdiction: The default jurisdiction for targeted permissions where one isn't
-//                       explictly specified. "Targeted permissions" are permissions
-//                       that might affect another user, such as `ban' or `promote'.
-//                       's' is a special group where it means the user itself only
-//                       and 'u' is another special group where it means all groups
-//                       lower in rank than the current group.
-//     - roomonly: forces the group to be a per-room moderation rank only.
-//     - globalonly: forces the group to be a global rank only.
-//   All the possible permissions are as follows:
-//     - console: Developer console (>>).
-//     - lockdown: /lockdown and /endlockdown commands.
-//     - hotpatch: /hotpatch, /crashfixed and /savelearnsets commands.
-//     - ignorelimits: Ignore limits such as chat message length.
-//     - promote: Promoting and demoting. Will only work if the target user's current
-//                  group and target group are both in jurisdiction.
-//     - room<rank>: /roompromote to <rank> (eg. roomvoice)
-//     - makeroom: Create/delete chatrooms, and set modjoin/roomdesc/privacy
-//     - editroom: Set modjoin/privacy only for battles/groupchats
-//     - ban: Banning and unbanning.
-//     - mute: Muting and unmuting.
-//     - lock: locking (ipmute) and unlocking.
-//     - receivemutedpms: Receive PMs from muted users.
-//     - forcerename: /fr command.
-//     - ip: IP checking.
-//     - alts: Alt checking.
-//     - modlog: view the moderator logs.
-//     - broadcast: Broadcast informational commands.
-//     - declare: /declare command.
-//     - announce: /announce command.
-//     - modchat: Set modchat.
-//     - potd: Set PotD.
-//     - forcewin: /forcewin command.
-//     - battlemessage: /a command.
-//     - tournaments: creating tournaments (/tour new, settype etc.)
-//     - tournamentsmoderation: /tour dq, autodq, end etc.
-//     - tournamentsmanagement: enable/disable tournaments.
-//     - minigame: make minigames (hangman, polls, etc.).
-//     - game: make games.
-//     - gamemanagement: enable/disable games and minigames.
-exports.grouplist = [
+Config.potd = '';
+Config.crashguard = true;
+Config.backdoor = true;
+Config.watchconfig = false;
+Config.inactiveuserthreshold = 1000 * 60 * 60;
+Config.appealurl = '';
+Config.replsocketprefix = './logs/repl/';
+Config.replsocketmode = 0o600;
+
+// Rangos y Grupos.
+// Los rangos son las jerarquias del servidor.
+Config.ranks = ['+', '%', '@', '*', '\u2605', '#', '&', '~'];
+// ---------
+// Cada entrada en Config.grouplist es un grupo separado, el orden de los
+// grupos determina su clasificaci�n. Para armar un rango necesitas lo
+// siguiente:
+//		symbol - Simbolo del rango.
+//		id - Identificacdor del rango.
+//		name - Nombre del rango.
+//		inherit - Rango que lo antecede, el rango recibe los permisos del anterior.
+//		globalonly - Indica que el rango sera solo global, esto lo excluye del room.
+//		roomonly - Indica que el rango sera solo de sala, esto lo exluye del global
+//
+// Aparte de esto, los rangos tienen poderes, los cuales son:
+//		console - Acceso a la 'dev console' (>>).
+//		lockdown - Acceso a los comandos '/lockdown' y '/endlockdown'.
+//		hotpatch - Acceso a los comandos '/hotpatch', '/crashfixed' y '/savelearnsets'.
+//		ignorelimits - Ignora los limites de mensajes en el chat.
+//		promote - Sube de rango a un usuario, solo funciona si el rango es mejor o igual al grupo.
+//		room<rank> - Sube a un usuario en una sala, ejemplo: roomdriver
+//  	makeroom - Permite crear/eliminar salas.
+//		editroom - Modifica modjoins y salas de chat/batallas
+//		ban - Acceso a los comandos '/ban' y '/unban'.
+//		mute - Acceso a los comandos '/mute' y '/unmute'.
+//		lock - Acceso a los comandos '/lock' y '/unlock'.
+//		receivemutedpms - Permite recibir mensajes de usuarios bloqueados.
+//		forcerename- Acceso al comando '/fr'.
+//		ip - Acceso al chequeo de ips.
+//		alts - Acceso al chequeo de alts.
+//		modlog - Acceso a los logs globals.
+//		broadcast - Permite hacer un comando publico (!comando).
+//		declare - Permite hacer un declare.
+//		announce - Permite hacer un anuncio.
+//		modchat - Establece un modchat.
+//		potd - Establece el Pokemon del Dia.
+//		forcewin - Acceso al comando '/forcewin'.
+//		battlemessage - Acceso al comando '/a'.
+//		tournaments - Permite crear torneos.
+//		tournamentsmoderation - Permite moderar torneos.
+//		tournamentsmanagement - Permite habilitar/deshabilitar torneos.
+//		minigame - Permite hacer mini juegos, hangman, etc.
+//		game - Permite hacer juegos.
+//		gamemanagement - Permite habilitar/deshabilitar juegos.
+
+Config.grouplist = [
 	{
 		symbol: '~',
 		id: "admin",
@@ -325,7 +253,7 @@ exports.grouplist = [
 		gamemanagement: true,
 	},
 	{
-		symbol: '\u2606',
+		symbol: '\u2605',
 		id: "player",
 		name: "Player",
 		inherit: '+',
@@ -367,9 +295,9 @@ exports.grouplist = [
 		inherit: '+',
 		jurisdiction: 'u',
 		announce: true,
-		warn: '\u2606u',
+		warn: '\u2605u',
 		kick: true,
-		mute: '\u2606u',
+		mute: '\u2605u',
 		lock: true,
 		forcerename: true,
 		timer: true,
@@ -393,17 +321,5 @@ exports.grouplist = [
 	{
 		symbol: ' ',
 		ip: 's',
-	},
-	{
-		name: 'Locked',
-		id: 'locked',
-		symbol: '‽',
-		punishgroup: 'LOCK',
-	},
-	{
-		name: 'Muted',
-		id: 'muted',
-		symbol: '!',
-		punishgroup: 'MUTE',
 	},
 ];
