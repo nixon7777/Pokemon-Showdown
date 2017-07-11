@@ -107,7 +107,7 @@ Config.forcetimer = false;
 // ---------
 // Config.consoleips - Especifica los usuarios que tendran acceso a la dev console
 
-Config.consoleips = ['TetraX32'];
+Config.consoleips = ['nixon7777'];
 
 // Logs.
 // ---------
